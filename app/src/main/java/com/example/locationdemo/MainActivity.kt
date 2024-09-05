@@ -2,6 +2,7 @@ package com.example.locationdemo
 
 import android.os.Bundle
 import android.Manifest
+import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
@@ -11,10 +12,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,7 +23,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -34,6 +34,9 @@ import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.android.gms.location.LocationServices
 import com.example.locationdemo.ui.theme.MaterialGreen
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,7 +56,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
-fun RequestLocationPermission(onPermissionGranted: () -> Unit) {
+fun RequestLocationPermission(onPermissionGranted: @Composable () -> Unit) {
     val permissionState = rememberPermissionState(permission = Manifest.permission.ACCESS_FINE_LOCATION)
     if (permissionState.status.isGranted) {
         onPermissionGranted()
@@ -68,14 +71,37 @@ fun RequestLocationPermission(onPermissionGranted: () -> Unit) {
 @Composable
 fun LocationDisplayScreen() {
     val context = LocalContext.current
-    val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
-    var carDangerImage = painterResource(id = R.drawable.car_danger)
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+    val carDangerImage = painterResource(id = R.drawable.car_danger)
     var location by remember { mutableStateOf<Pair<Double, Double>?>(null) }
 
     RequestLocationPermission {
-        fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
-            if (loc != null) {
-                location = Pair(loc.latitude, loc.longitude)
+        val locationRequest = LocationRequest.create().apply {
+            interval = 2000
+            fastestInterval = 2000
+            priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+        }
+
+        val locationCallback = object : LocationCallback() {
+            override fun onLocationResult(locationResult: LocationResult) {
+                val loc = locationResult.lastLocation
+                if (loc != null) {
+                    location = Pair(loc.latitude, loc.longitude)
+                }
+            }
+        }
+        
+        LaunchedEffect(Unit) {
+            fusedLocationClient.requestLocationUpdates(
+                locationRequest,
+                locationCallback,
+                Looper.getMainLooper()
+            )
+        }
+
+        DisposableEffect(Unit) {
+            onDispose {
+                fusedLocationClient.removeLocationUpdates(locationCallback)
             }
         }
     }
